@@ -1,5 +1,4 @@
 import ast
-import re
 
 from ts_type_filter import (
     Any,
@@ -66,66 +65,6 @@ ESCAPED_STRING2 : "'" _STRING_ESC_INNER "'"
 %ignore WS
 """
 
-def preprocess_for_enhanced_comments(text):
-    """
-    Simple preprocessing that converts all comment types to line comments
-    and moves hint comments to separate lines.
-    """
-    result_lines = []
-    lines = text.split('\n')
-    
-    for line in lines:
-        current_line = line
-        
-        # Step 1: Handle block comments on this line
-        while True:
-            block_match = re.search(r'/\*[\s\S]*?\*/', current_line)
-            if not block_match:
-                break
-            
-            comment_content = block_match.group(0)
-            before_comment = current_line[:block_match.start()]
-            after_comment = current_line[block_match.end():]
-            
-            if comment_content.startswith('/* Hint: '):
-                # Convert block hint to line hint and put it before the type definition
-                hint_content = comment_content[9:-2].strip()
-                result_lines.append(f'// Hint: {hint_content}')
-                
-                # Remove the comment but join the before and after parts
-                current_line = before_comment + after_comment
-            else:
-                # Remove non-hint block comment, replace with space
-                current_line = before_comment + ' ' + after_comment
-        
-        # Step 2: Handle line comments
-        line_comment_match = re.search(r'//.*$', current_line)
-        if line_comment_match:
-            comment_text = line_comment_match.group(0)
-            line_before_comment = current_line[:line_comment_match.start()].rstrip()
-            
-            if comment_text.startswith('// Hint: '):
-                # This is a hint comment - keep the original behavior
-                if line_before_comment.strip():
-                    # There's TypeScript code before the comment - split them
-                    result_lines.append(line_before_comment)
-                    result_lines.append(comment_text)
-                else:
-                    # Hint comment is on its own line
-                    result_lines.append(comment_text)
-            else:
-                # Non-hint comment - remove it
-                if line_before_comment.strip():
-                    result_lines.append(line_before_comment)
-                # else: empty line, skip it
-        else:
-            # No line comment, add the line if it has content
-            if current_line.strip():
-                result_lines.append(current_line)
-    
-    return '\n'.join(result_lines)
-
-
 # Lazy initialization of parser to avoid compilation cost at import time
 _parser = None
 
@@ -146,9 +85,6 @@ def isToken(node, type_name):
 def parse(text):
     import lark
     
-    # Preprocess to handle flexible comments
-    processed_text = preprocess_for_enhanced_comments(text)
-    
     # Create Transformer class dynamically to avoid import-time dependency
     # Transformer class converts the parse tree into AST nodes.
     class ParseTransformer(lark.Transformer):
@@ -157,19 +93,19 @@ def parse(text):
             for child in children:
                 if isToken(child, "COMMENT"):
                     if child.value.startswith("// Hint: "):
-                        result.append("// " + child.value[9:])
+                        result.append("//" + child[8:])
                 else:
                     result.append(child)
             return result
 
         def define(self, children):
             hint = None
-            while children and isToken(children[0], "COMMENT"):
-                hint = children.pop(0).value[2:].strip()
+            while isToken(children[0], "COMMENT"):
+                hint = children.pop(0).value[2:].strip()  # Strip `// ` from comment token
 
             name = children.pop(0).value  # Get the name of the type
             params = (
-                children.pop(0) if children and type(children[0]) == list else []
+                children.pop(0) if type(children[0]) == list else []
             )  # Get type parameters if any
             value = children.pop()  # The type definition itself
             return Define(name, params, value, hint)
@@ -201,7 +137,7 @@ def parse(text):
 
         def field(self, items):
             name = items.pop(0).value
-            if items and isToken(items[0], "QUESTION"):
+            if isToken(items[0], "QUESTION"):
                 name = name + "?"
                 items.pop(0)
             value = items.pop(0)
@@ -241,5 +177,5 @@ def parse(text):
             return Union(*items)
     
     parser = get_parser()
-    tree = parser.parse(processed_text)
+    tree = parser.parse(text)
     return ParseTransformer().transform(tree)

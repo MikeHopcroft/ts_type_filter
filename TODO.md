@@ -1,6 +1,7 @@
 # TODO
 
 Top Top Top
+* Bug: Array<A|B|C> filters to never if A is never, but (A|B|C)[] works
 * Normalizer
   * Bug: named types with no optional fields don't show up in defaults.
     * Is this really a bug or can the normalizer deal with it?
@@ -12,9 +13,11 @@ Top Top Top
 * Parse errors
   * Comments inside definitions
   * Comments to the right of text
-  * Type `never`
-  * Type `string`
-  * Type `number`
+  * /* Comments */
+  * Better error message with line number and column
+  * x Type `never`
+  * x Type `string`
+  * x Type `number`
 * Are string, number, boolean, never and any implemented with the same pattern?
   * Is any indexed?
   * Why use never() instead of an alias?
